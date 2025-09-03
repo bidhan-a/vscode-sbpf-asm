@@ -483,7 +483,7 @@ type ParsedInstruction = {
   dst?: number;
   src?: number;
   offset?: number | string;
-  imm?: number | string;
+  imm?: bigint | string;
   size?: 8 | 16 | 32 | 64;
 };
 
@@ -538,13 +538,12 @@ function parseInstruction(line: string): ParsedInstruction | null {
     const rm = t.trim().match(/^r(\d{1,2})$/i);
     return rm ? Number(rm[1]) : undefined;
   };
-  const parseNum = (t: string): number | undefined => {
+  const parseNum = (t: string): bigint | undefined => {
     const s = t.trim();
-    if (/^[+-]?0x[0-9a-f]+$/i.test(s)) return Number(BigInt(s));
-    if (/^[+-]?\d+$/.test(s)) return Number(s);
+    if ((/^[+-]?0x[0-9a-f]+$/i.test(s)) || (/^[+-]?\d+$/.test(s))) return BigInt(s);
     return undefined;
   };
-  const parseOffset = (t: string): number | undefined => parseNum(t?.replace(/^\+/, ''));
+  const parseOffset = (t: string): number | undefined => Number(parseNum(t?.replace(/^\+/, '')));
 
   const mem = (t: string) => {
     const txt = t.trim();
@@ -554,7 +553,7 @@ function parseInstruction(line: string): ParsedInstruction | null {
     const sign = mm[2] === '-' ? -1 : 1;
     const offRaw = (mm[3] ?? '').trim();
     const offNum = parseNum(offRaw);
-    const off = offNum !== undefined ? sign * offNum : undefined;
+    const off = offNum !== undefined ? sign * Number(offNum) : undefined;
     const offSym = offNum === undefined ? (sign === -1 ? `-${offRaw}` : offRaw) : undefined;
     return { base, off, offSym } as { base: number; off?: number; offSym?: string };
   };
@@ -747,6 +746,14 @@ function describeInstruction(p: ParsedInstruction): { title: string; text: strin
   return null;
 }
 
+function formatImmediate(value: bigint | string): string {
+  if (typeof value === 'bigint') {
+    const hex = '0x' + value.toString(16).toUpperCase();
+    return `${value.toString()} (${hex})`;
+  }
+  return value.toString();
+}
+
 function formatFields(p: ParsedInstruction): string {
   let opcode: string;
   if (p.opcode.startsWith('j')) {
@@ -761,7 +768,7 @@ function formatFields(p: ParsedInstruction): string {
     `dst=${p.dst ?? 'unused'}`,
     `src=${p.src ?? 'unused'}`,
     `offset=${p.offset ?? 'unused'}`,
-    `imm=${p.imm ?? 'unused'}`
+    `imm=${p.imm ? formatImmediate(p.imm) : 'unused'}`
   ];
   return kv.join(', ');
 }
